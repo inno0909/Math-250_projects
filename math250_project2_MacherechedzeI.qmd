@@ -1,0 +1,154 @@
+---
+title: "Practicing for the Wrong Apocalypse"
+author: "Innocent Macherechedze"
+format: html
+embed-resources: true
+editor_options: 
+  chunk_output_type: console
+code-fold: true
+---
+
+```{r}
+#| label: setup
+#| message: false
+
+library(tidyverse)
+library(readr)
+library(gt)
+horror <- read_csv("horror_movies.csv")
+
+```
+# Introduction 
+
+While horror film is traditionally viewed as escapism, recent psychological research suggests that it serves as a "low-cost simulation" of danger. Scrivner et al. (2021)^[[Scrivner et al. (2021)](https://pmc.ncbi.nlm.nih.gov/articles/PMC7492010/)] argue that these fictional experiences allow audiences to rehearse emotional responses and gather information about threats they have never encountered. This "simulation" theory is supported by empirical evidence from the COVID-19 pandemic, where fans of "prepper" genres such as apocalyptic films exhibited measurably greater psychological resilience and preparedness than non-fans.
+
+If this is true, we need to ask whether 
+the threats horror simulates are the right ones to prepare us for the most likely scenerios. Using the horror film dataset, we will attempt to map the threat landscape the industry has constructed and compares it against scientific estimates of which catastrophic scenarios pose the greatest real-world risk.^[[Ord, T. (2025). The Precipice Revisited.](https://www.tobyord.com/writing/the-precipice-revisited)]
+
+# What is the industry simulating
+
+```{r}
+#| message: false
+#| warning: false
+#| fig-alt: "Bar chart showing proportion of keyword occurrences across English-language horror film overviews by threat category. Human threats account for approximately 47% and Supernaturalfor 44%, together comprising over 90% of all mentions.Biological, Technology and Ecological threats each account for less than 5%."
+
+horror_filtered <- horror |>
+  filter(original_language == "en") |>
+  mutate(
+    overview_lower = str_to_lower(overview),
+    bio_words = str_count(overview_lower,
+                          "(virus|pandemic|outbreak|infection|disease)"),
+    tech_words = str_count(overview_lower,
+                           "(robot|artificial intelligence|internet|cyber|machine)"),
+    eco_words = str_count(overview_lower,
+                          "(climate|disaster|ecosystem|nature|weather|volcano)"),
+    human_words = str_count(overview_lower,
+                             "(killer|slasher|psychopath|murder|war|nuclear)"),
+    super_words = str_count(overview_lower, 
+                            "(ghost|demon|spirit|haunted|curse|zombie|monster)"))
+
+threat_totals <- horror_filtered |>
+  summarise(
+    Biological = sum(bio_words, na.rm = TRUE),
+    Technology = sum(tech_words, na.rm = TRUE),
+    Ecological = sum(eco_words, na.rm = TRUE),
+    Human = sum(human_words, na.rm = TRUE),
+    Supernatural = sum(super_words, na.rm = TRUE)) |>
+  
+  pivot_longer(
+    cols = 1:5,
+    names_to = "threat_category",
+    values_to = "total_word_count") |> 
+  mutate(category_prop = total_word_count/sum(total_word_count))
+  
+ggplot (threat_totals, aes(x= fct_reorder(threat_category, total_word_count, .desc = T),
+                           y= category_prop,
+                           fill = threat_category)) +
+  geom_col(show.legend = FALSE) + 
+  labs(
+    title = "What is the Horror Industry Simulating?",
+    subtitle = "Propotion of keyword occurrences across movie overviews",
+    x = "Threat Category",
+    y = "Propotion of Keywords Mentioned")+
+  theme_minimal()+
+  scale_fill_brewer(palette = "Dark2")
+  
+```
+
+If horror films serve as low-cost simulations for survival, the data reveals exactly what we are practicing for. With human and supernatural themes comprising over 90% of the recognized threats, it is clear that the industry’s simulations are heavily biased toward tangible, individualized antagonists rather than systemic or environmental dangers. The next question should therefore be what should be be practicing for. To answer this, I looked at the existential risk estimates compiled by Oxford philosopher Toby Ord, which quantify the actual mathematical probability of what scenarios could bring about human extinction over the next century. 
+
+# The Sumulation Gap
+
+```{r}
+#| fig-alt: "Grouped bar chart comparing horror keyword frequency against real-world extinction probability for five threat categories. Human and Supernatural bars are tall with near-zero real-world probability bars beside them. Technology shows the opposite pattern with a 10% real-world probability bar dwarfing its 2.4% horror mentions bar."
+
+real_world_data <- tibble(
+  threat_category = c("Technology", "Biological", "Human", "Ecological", "Supernatural"),
+  actual_probability = c(0.10, 0.033, 0.001, 0.001, 0))
+
+threat_totals |>
+  left_join(real_world_data, by = "threat_category") |>
+  select(threat_category,
+         `Horror Mentions` = category_prop, 
+         `Real Probalility`= actual_probability) |>
+  pivot_longer(
+    cols = c(`Horror Mentions`, `Real Probalility`),
+    names_to = "metric",
+    values_to = "value") |> 
+
+ggplot(aes(x = fct_reorder(threat_category, value), y = value, fill= metric))+
+  geom_col(position = "dodge") +
+  labs(
+    title = "Practicing for the Wrong Apocalypse",
+    subtitle = "Horror keyword frequency vs. real-world threat probability",
+    x = "Threat Category",
+    y = "Proportion / Probability") +
+  theme_minimal()+
+  scale_fill_brewer( palette = "Dark2")
+```
+
+This chart crystallizes the simulation gap by revealing an inverse relationship. The threats dominating horror cinema (Human and Supernatural) carry negligible real-world probabilities, while the most severe scientific risk (Technology, at 10%) receives a fraction of the cinematic focus (2.4%). The horror genre, it appears, is preparing fans for the wrong apocalypse.
+
+# Do the audience drive the gap?
+
+```{r}
+horror_filtered |>
+  filter(!is.na(vote_average), vote_count > 0) |>
+  select(vote_average,
+         Biological   = bio_words,
+         Technology   = tech_words,
+         Ecological   = eco_words,
+         Human        = human_words,
+         Supernatural = super_words) |>
+  pivot_longer(cols      = c(Biological, Technology, Ecological, Human, Supernatural),
+    names_to  = "threat_category",
+    values_to = "word_count") |>
+  filter(word_count > 0) |>
+  summarise(avg_rating = mean(vote_average, na.rm = TRUE),
+            .by= threat_category) |>
+  arrange(desc(avg_rating)) |>
+  gt() |>
+  tab_header(
+    title    = "Audience reception by threat category",
+    subtitle = "Average ratings for simulated threats") |>
+  cols_label(threat_category = "Threat category",
+             avg_rating      = "Average rating (1–10)") |>
+  fmt_number(columns  = avg_rating,
+             decimals = 2)
+```
+
+The final piece of the puzzle lies in the audience reception. Does the public demand drive the production? The average ratings suggest otherwise. The industry overwhelmingly produces Human threat narratives, yet audiences rate them lower than any other category. Meanwhile, the films that simulate Ecological collapse receive the highest ratings. Audiences are clearly receptive to all narratives. The fact that the industry continues to produce ghost and slasher themed films is not because of flat or negative audience reception. Therefore we can conclude that our cinematic survival simulations are misaligned with not only scientific risk but also market demand.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
