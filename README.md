@@ -1,8 +1,8 @@
 
 # Math 250: Introduction to Statistical Programming
-Lake Forest College — Spring 2026
+Lake Forest College — Spring 2026 <br>
 This repository contains my projects from Math 250, an introduction to data analysis programming using R.
-About the Course
+## About the Course
 Math 250 covers the full data analysis workflow, including:
 
 - Data cleaning & wrangling
